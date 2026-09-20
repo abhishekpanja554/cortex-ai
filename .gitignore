@@ -1,0 +1,52 @@
+# Environments & secrets
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Type checkers & linters
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.dmypy.json
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Databases / logs / local artifacts
+*.db
+*.sqlite3
+*.log
+celerybeat-schedule
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# macOS
+.DS_Store
