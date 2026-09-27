@@ -10,6 +10,18 @@ class Settings(BaseSettings):
     redis_brpop_timeout_seconds: int = 5
     cortex_api_base_url: str
     cortex_ai_api_key: str
+    db_host: str
+    db_port: int = 5432
+    db_name: str = "cortex-ai"
+    db_user: str
+    db_password: str
+
+    gemini_api_key: str
+    gemini_embedding_model: str = "gemini-embedding-2"
+    embedding_dimension: int = 3072
+
+    chunk_size_tokens: int = 500
+    chunk_overlap_tokens: int = 50
 
     model_config = SettingsConfigDict(env_file = ".env")
 
