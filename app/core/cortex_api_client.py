@@ -21,3 +21,15 @@ class CortexApiClient:
             json={"errorMessage": error_message},
         )
         res.raise_for_status()
+
+    def search_notes(self, owner_id: UUID, query: str, limit: int) -> list[dict]:
+        res = self._client.post(
+            "internal/search",
+            json={
+                "ownerId": str(owner_id),
+                "query": query,
+                "limit": limit
+            }
+        )
+        res.raise_for_status()
+        return res.json()

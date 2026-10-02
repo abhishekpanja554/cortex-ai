@@ -1,5 +1,5 @@
-import uuid
-from uuid import UUID, uuid4
+from sqlalchemy import select
+from uuid import UUID
 import sqlalchemy as sa
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import delete
@@ -47,4 +47,20 @@ def delete_chunks(note_id: UUID ) -> None:
         session.execute(delete(note_chunks_table).where(note_chunks_table.c.note_id == note_id))
         session.commit()
 
-    uuid.UUID("4a1e44a4-d3f1-4308-ae65-87810d6c2aba")
+def search_chunks(owner_id: UUID, query_embedding: list[float], top_k: int) -> list[dict]:
+    distance_expr = note_chunks_table.c.embedding.cosine_distance(query_embedding)
+
+    stmt = (
+        select(
+            note_chunks_table.c.note_id,
+            note_chunks_table.c.chunk_index,
+            note_chunks_table.c.chunk_text,
+            distance_expr.label("distance")
+        ).where(note_chunks_table.c.owner_id == owner_id)
+        .order_by(distance_expr)
+        .limit(top_k)
+    )
+
+    with get_session() as session:
+        result = session.execute(stmt)
+        return [dict(row._mapping) for row in result]
