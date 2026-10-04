@@ -14,6 +14,8 @@ from app.core.hybrid_search import hybrid_search
 from app.core.rag import answer_query
 import logging
 
+from app.core.reranking import CrossEncoderReranker
+
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
@@ -64,6 +66,7 @@ class ChatRequest(BaseModel):
     query: str
     top_k: int = 5
 chat_client = GeminiChatClient(get_settings().gemini_api_key, get_settings().gemini_chat_model)
+reranker = CrossEncoderReranker(get_settings().reranker_model)
 @app.post("/chat")
 def chat(request: ChatRequest) -> StreamingResponse:
     def event_stream():
@@ -73,6 +76,7 @@ def chat(request: ChatRequest) -> StreamingResponse:
                 embedding_client,
                 cortex_api_client,
                 chat_client,
+                reranker,
                 request.top_k):
             yield f"data: {json.dumps(event, default=str)}\n\n"
 

@@ -7,6 +7,7 @@ from app.core.cortex_api_client import CortexApiClient
 from app.core.embeddings import GeminiEmbeddingClient
 from app.core.generation import GeminiChatClient
 from app.core.hybrid_search import hybrid_search
+from app.core.reranking import CrossEncoderReranker
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +40,13 @@ def build_user_content(query: str, context_items: list[dict]) -> str:
 def answer_query(
         owner_id: UUID,
         query: str,
-        embedding_client: "GeminiEmbeddingClient",
-        cortex_api_client: "CortexApiClient",
-        chat_client: "GeminiChatClient",
+        embedding_client: GeminiEmbeddingClient,
+        cortex_api_client: CortexApiClient,
+        chat_client: GeminiChatClient,
+        reranker: CrossEncoderReranker,
         top_k: int = 5,
         candidate_limit: int = 20,
+
 ) -> Iterator[dict]:
     system_instruct = (
         "You are an intelligent assistant. You will be provided with several pieces of "
@@ -63,12 +66,13 @@ def answer_query(
         fused_results = hybrid_search(
             owner_id=owner_id,
             query=query,
-            top_k=top_k,
+            top_k=candidate_limit,
             embedding_client=embedding_client,
             cortex_api_client=cortex_api_client,
             candidate_limit=candidate_limit,
         )
         context_items = hydrate_missing_context(owner_id, fused_results)
+        context_items = reranker.rerank(query, context_items, top_k=top_k)
         yield {"type": "sources", "sources": context_items}
         prompt = build_user_content(query, context_items)
         for piece in chat_client.stream_answer(system_instruct=system_instruct, user_content=prompt):

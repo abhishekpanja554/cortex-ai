@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     gemini_chat_model: str = "gemini-3.5-flash-lite"
     embedding_dimension: int = 3072
 
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
     chunk_size_tokens: int = 500
     chunk_overlap_tokens: int = 50
 
