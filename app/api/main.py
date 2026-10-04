@@ -1,13 +1,20 @@
+import json
 from uuid import UUID
 
 from fastapi import FastAPI
 from pydantic import BaseModel
+from starlette.responses import StreamingResponse
 
 from app.core.chunk_repository import search_chunks
 from app.core.config import get_settings
 from app.core.cortex_api_client import CortexApiClient
 from app.core.embeddings import GeminiEmbeddingClient
+from app.core.generation import GeminiChatClient
 from app.core.hybrid_search import hybrid_search
+from app.core.rag import answer_query
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
@@ -51,3 +58,22 @@ def hybrid_search_endpoint(request: HybridSearchRequest) -> list[dict]:
         embedding_client=embedding_client,
         cortex_api_client=cortex_api_client
     )
+
+class ChatRequest(BaseModel):
+    owner_id: UUID
+    query: str
+    top_k: int = 5
+chat_client = GeminiChatClient(get_settings().gemini_api_key, get_settings().gemini_chat_model)
+@app.post("/chat")
+def chat(request: ChatRequest) -> StreamingResponse:
+    def event_stream():
+        for event in answer_query(
+                request.owner_id,
+                request.query,
+                embedding_client,
+                cortex_api_client,
+                chat_client,
+                request.top_k):
+            yield f"data: {json.dumps(event, default=str)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

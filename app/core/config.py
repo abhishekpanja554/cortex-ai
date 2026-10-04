@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     gemini_api_key: str
     gemini_embedding_model: str = "gemini-embedding-2"
+    gemini_chat_model: str = "gemini-3.5-flash-lite"
     embedding_dimension: int = 3072
 
     chunk_size_tokens: int = 500

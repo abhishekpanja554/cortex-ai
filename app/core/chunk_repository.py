@@ -64,3 +64,18 @@ def search_chunks(owner_id: UUID, query_embedding: list[float], top_k: int) -> l
     with get_session() as session:
         result = session.execute(stmt)
         return [dict(row._mapping) for row in result]
+
+def get_chunk_text_for_note(owner_id: UUID, note_id: UUID) -> str|None:
+    stmt = (
+        select(
+            note_chunks_table.c.chunk_text
+        ).where(
+            note_chunks_table.c.owner_id == owner_id,
+            note_chunks_table.c.note_id == note_id)
+        .order_by(note_chunks_table.c.chunk_index)
+        .limit(1)
+    )
+
+    with get_session() as session:
+        res = session.execute(stmt)
+        return res.scalar()
