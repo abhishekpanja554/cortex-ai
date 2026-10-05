@@ -28,6 +28,8 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file = ".env")
 
+    jwt_secret: str
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

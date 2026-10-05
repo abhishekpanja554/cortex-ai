@@ -1,11 +1,12 @@
 import json
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from app.core.agent import run_agent_turn, confirm_pending_action
+from app.core.auth import get_current_owner_id
 from app.core.chunk_repository import search_chunks
 from app.core.config import get_settings
 from app.core.cortex_api_client import CortexApiClient
@@ -26,7 +27,6 @@ def health() -> dict:
     return {"status": "ok"}
 
 class SearchRequest(BaseModel):
-    owner_id: UUID
     query: str
     top_k: int = 5
 
@@ -41,21 +41,20 @@ class SearchResponse(BaseModel):
 
 embedding_client = GeminiEmbeddingClient(get_settings().gemini_api_key, get_settings().gemini_embedding_model)
 @app.post("/search")
-def search(request: SearchRequest) -> SearchResponse:
+def search(request: SearchRequest, owner_id: UUID = Depends(get_current_owner_id)) -> SearchResponse:
     query_embedding = embedding_client.embed_query(request.query)
-    results = search_chunks(request.owner_id, query_embedding, request.top_k)
+    results = search_chunks(owner_id, query_embedding, request.top_k)
     return SearchResponse(results=[SearchResultItem(**r) for r in results])
 
 class HybridSearchRequest(BaseModel):
-    owner_id: UUID
     query: str
     top_k: int = 5
 
 cortex_api_client = CortexApiClient(get_settings().cortex_api_base_url, get_settings().cortex_ai_api_key)
 @app.post("/hybrid-search")
-def hybrid_search_endpoint(request: HybridSearchRequest) -> list[dict]:
+def hybrid_search_endpoint(request: HybridSearchRequest, owner_id: UUID = Depends(get_current_owner_id)) -> list[dict]:
     return hybrid_search(
-        request.owner_id,
+        owner_id,
         request.query,
         request.top_k,
         embedding_client=embedding_client,
@@ -63,16 +62,15 @@ def hybrid_search_endpoint(request: HybridSearchRequest) -> list[dict]:
     )
 
 class ChatRequest(BaseModel):
-    owner_id: UUID
     query: str
     top_k: int = 5
 chat_client = GeminiChatClient(get_settings().gemini_api_key, get_settings().gemini_chat_model)
 reranker = CrossEncoderReranker(get_settings().reranker_model)
 @app.post("/chat")
-def chat(request: ChatRequest) -> StreamingResponse:
+def chat(request: ChatRequest, owner_id: UUID = Depends(get_current_owner_id)) -> StreamingResponse:
     def event_stream():
         for event in answer_query(
-                request.owner_id,
+                owner_id,
                 request.query,
                 embedding_client,
                 cortex_api_client,
@@ -84,25 +82,23 @@ def chat(request: ChatRequest) -> StreamingResponse:
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 class AgentChatRequest(BaseModel):
-    owner_id: UUID
     query: str
 
 @app.post("/agent-chat")
-def agent_chat(request: AgentChatRequest) -> StreamingResponse:
+def agent_chat(request: AgentChatRequest, owner_id: UUID = Depends(get_current_owner_id)) -> StreamingResponse:
     def event_stream():
-        for event in run_agent_turn(request.owner_id, request.query, embedding_client, cortex_api_client, chat_client):
+        for event in run_agent_turn(owner_id, request.query, embedding_client, cortex_api_client, chat_client):
             yield f"data: {json.dumps(event, default=str)}\n\n"
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 class AgentConfirmRequest(BaseModel):
-    owner_id: UUID
     confirmation_id: UUID
     approve: bool
 
 @app.post("/agent-chat/confirm")
-def agent_chat_confirm(request: AgentConfirmRequest) -> dict:
+def agent_chat_confirm(request: AgentConfirmRequest, owner_id: UUID = Depends(get_current_owner_id)) -> dict:
     res = confirm_pending_action(
-        request.owner_id,
+        owner_id,
         request.confirmation_id,
         request.approve,
         cortex_api_client
