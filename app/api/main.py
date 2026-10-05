@@ -1,10 +1,11 @@
 import json
 from uuid import UUID
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
+from app.core.agent import run_agent_turn, confirm_pending_action
 from app.core.chunk_repository import search_chunks
 from app.core.config import get_settings
 from app.core.cortex_api_client import CortexApiClient
@@ -81,3 +82,33 @@ def chat(request: ChatRequest) -> StreamingResponse:
             yield f"data: {json.dumps(event, default=str)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+class AgentChatRequest(BaseModel):
+    owner_id: UUID
+    query: str
+
+@app.post("/agent-chat")
+def agent_chat(request: AgentChatRequest) -> StreamingResponse:
+    def event_stream():
+        for event in run_agent_turn(request.owner_id, request.query, embedding_client, cortex_api_client, chat_client):
+            yield f"data: {json.dumps(event, default=str)}\n\n"
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+class AgentConfirmRequest(BaseModel):
+    owner_id: UUID
+    confirmation_id: UUID
+    approve: bool
+
+@app.post("/agent-chat/confirm")
+def agent_chat_confirm(request: AgentConfirmRequest) -> dict:
+    res = confirm_pending_action(
+        request.owner_id,
+        request.confirmation_id,
+        request.approve,
+        cortex_api_client
+    )
+    if res["status"] == "not_found":
+        raise HTTPException(status_code=404, detail=res["message"])
+    if res["status"] == "error":
+        raise HTTPException(status_code=500, detail=res["message"])
+    return res

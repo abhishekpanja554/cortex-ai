@@ -34,3 +34,6 @@ class GeminiChatClient:
                 usage.candidates_token_count,
                 usage.total_token_count,
             )
+
+    def create_chat(self, config: types.GenerateContentConfig):
+        return self.client.chats.create(model=self.model, config=config)

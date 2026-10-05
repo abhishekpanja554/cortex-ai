@@ -33,3 +33,12 @@ class CortexApiClient:
         )
         res.raise_for_status()
         return res.json()
+
+    def get_note(self, owner_id: UUID, note_id: UUID) -> dict:
+        res = self._client.get(f"internal/notes/{note_id}", params={"ownerId" : str(owner_id)})
+        res.raise_for_status()
+        return res.json()["data"]
+
+    def delete_note(self, owner_id: UUID, note_id: UUID) -> None:
+        res = self._client.delete(f"internal/notes/{note_id}", params={"ownerId" : str(owner_id)})
+        res.raise_for_status()
