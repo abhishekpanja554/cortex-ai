@@ -42,3 +42,21 @@ class CortexApiClient:
     def delete_note(self, owner_id: UUID, note_id: UUID) -> None:
         res = self._client.delete(f"internal/notes/{note_id}", params={"ownerId" : str(owner_id)})
         res.raise_for_status()
+
+    def create_note(self, owner_id: UUID, title: str, body: str) -> dict:
+        res = self._client.post(
+            "internal/notes",
+            params={"ownerId": str(owner_id)},
+            json={"title": title, "body": body}
+        )
+        res.raise_for_status()
+        return res.json()["data"]
+
+    def update_note(self, owner_id: UUID, note_id: UUID, title: str, body: str) -> dict:
+        res = self._client.put(
+            f"internal/notes/{note_id}",
+            params={"ownerId": str(owner_id)},
+            json={"title": title, "body": body}
+        )
+        res.raise_for_status()
+        return res.json()["data"]

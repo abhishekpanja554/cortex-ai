@@ -53,3 +53,39 @@ def delete_note_tool(
         if e.response.status_code == 404:
             return {"success": False, "error": f"No note found with id {note_id}"}
         raise
+
+def create_note_tool(
+        owner_id: UUID,
+        cortex_api_client: CortexApiClient,
+        title: str,
+        body: str
+) -> dict:
+    try:
+        note = cortex_api_client.create_note(owner_id, title, body)
+        return {"success": True, "note_id": note["id"], "title": note["title"]}
+    except httpx.HTTPStatusError:
+        return {"success": False, "error": "Failed to create note"}
+
+def update_note_tool(
+        owner_id: UUID,
+        cortex_api_client: CortexApiClient,
+        note_id: str,
+        title: str,
+        body: str
+) -> dict:
+    try:
+        note = cortex_api_client.update_note(owner_id, UUID(note_id), title, body)
+        return {"success": True, "title": note["title"]}
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return {"success": False, "error": f"No note found with id {note_id}"}
+        raise
+
+def bulk_delete_notes_tool(
+        owner_id: UUID,
+        cortex_api_client: CortexApiClient,
+        note_ids: list[str]
+) -> dict:
+    return {"results": [
+        {"note_id": nid, **delete_note_tool(owner_id, cortex_api_client, nid)} for nid in note_ids
+    ]}

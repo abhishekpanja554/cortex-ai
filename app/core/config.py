@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     gemini_api_key: str
     gemini_embedding_model: str = "gemini-embedding-2"
     gemini_chat_model: str = "gemini-3.5-flash-lite"
+    gemini_complex_model: str
     embedding_dimension: int = 3072
 
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"

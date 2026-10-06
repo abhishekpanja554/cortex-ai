@@ -68,6 +68,7 @@ class ChatRequest(BaseModel):
     conversation_id: UUID | None = None
 
 chat_client = GeminiChatClient(get_settings().gemini_api_key, get_settings().gemini_chat_model)
+complex_chat_client = GeminiChatClient(get_settings().gemini_api_key, get_settings().gemini_complex_model)
 reranker = CrossEncoderReranker(get_settings().reranker_model)
 @app.post("/chat")
 def chat(request: ChatRequest, owner_id: UUID = Depends(rate_limiter("chat", 10, 60))) -> StreamingResponse:
@@ -78,6 +79,7 @@ def chat(request: ChatRequest, owner_id: UUID = Depends(rate_limiter("chat", 10,
                 embedding_client,
                 cortex_api_client,
                 chat_client,
+                complex_chat_client,
                 reranker,
                 request.top_k,
                 conversation_id=request.conversation_id,):

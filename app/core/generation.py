@@ -14,7 +14,8 @@ class GeminiChatClient:
     def stream_answer(self,
         system_instruct: str,
         user_content: str,
-        history: list[types.Content] | None = None
+        history = None,
+        usage_out: dict | None = None
     ) -> Iterator[str]:
         config = types.GenerateContentConfig(system_instruction=system_instruct)
         chat = self.create_chat(config=config, history=history)
@@ -35,6 +36,9 @@ class GeminiChatClient:
                 usage.candidates_token_count,
                 usage.total_token_count,
             )
+            if usage_out is not None:
+                usage_out["prompt_tokens"] = usage.prompt_token_count
+                usage_out["output_tokens"] = usage.candidates_token_count
 
     def create_chat(self, config: types.GenerateContentConfig, history: list[types.Content] | None = None):
         return self.client.chats.create(model=self.model, config=config, history=history)
