@@ -65,6 +65,8 @@ def hybrid_search_endpoint(request: HybridSearchRequest, owner_id: UUID = Depend
 class ChatRequest(BaseModel):
     query: str
     top_k: int = 5
+    conversation_id: UUID | None = None
+
 chat_client = GeminiChatClient(get_settings().gemini_api_key, get_settings().gemini_chat_model)
 reranker = CrossEncoderReranker(get_settings().reranker_model)
 @app.post("/chat")
@@ -77,7 +79,8 @@ def chat(request: ChatRequest, owner_id: UUID = Depends(rate_limiter("chat", 10,
                 cortex_api_client,
                 chat_client,
                 reranker,
-                request.top_k):
+                request.top_k,
+                conversation_id=request.conversation_id,):
             yield f"data: {json.dumps(event, default=str)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

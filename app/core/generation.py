@@ -11,13 +11,14 @@ class GeminiChatClient:
         self.client = genai.Client(api_key=api_key)
         self.model = model
 
-    def stream_answer(self, system_instruct: str, user_content: str) -> Iterator[str]:
+    def stream_answer(self,
+        system_instruct: str,
+        user_content: str,
+        history: list[types.Content] | None = None
+    ) -> Iterator[str]:
         config = types.GenerateContentConfig(system_instruction=system_instruct)
-        responses = self.client.models.generate_content_stream(
-            model=self.model,
-            contents=user_content,
-            config=config
-        )
+        chat = self.create_chat(config=config, history=history)
+        responses = chat.send_message_stream(user_content)
 
         usage = None
         for chunk in responses:
@@ -35,5 +36,5 @@ class GeminiChatClient:
                 usage.total_token_count,
             )
 
-    def create_chat(self, config: types.GenerateContentConfig):
-        return self.client.chats.create(model=self.model, config=config)
+    def create_chat(self, config: types.GenerateContentConfig, history: list[types.Content] | None = None):
+        return self.client.chats.create(model=self.model, config=config, history=history)
