@@ -16,6 +16,7 @@ from app.core.hybrid_search import hybrid_search
 from app.core.rag import answer_query
 import logging
 
+from app.core.rate_limit import rate_limiter
 from app.core.reranking import CrossEncoderReranker
 
 logging.basicConfig(level=logging.INFO)
@@ -41,7 +42,7 @@ class SearchResponse(BaseModel):
 
 embedding_client = GeminiEmbeddingClient(get_settings().gemini_api_key, get_settings().gemini_embedding_model)
 @app.post("/search")
-def search(request: SearchRequest, owner_id: UUID = Depends(get_current_owner_id)) -> SearchResponse:
+def search(request: SearchRequest, owner_id: UUID = Depends(rate_limiter("search", 30, 60))) -> SearchResponse:
     query_embedding = embedding_client.embed_query(request.query)
     results = search_chunks(owner_id, query_embedding, request.top_k)
     return SearchResponse(results=[SearchResultItem(**r) for r in results])
@@ -52,7 +53,7 @@ class HybridSearchRequest(BaseModel):
 
 cortex_api_client = CortexApiClient(get_settings().cortex_api_base_url, get_settings().cortex_ai_api_key)
 @app.post("/hybrid-search")
-def hybrid_search_endpoint(request: HybridSearchRequest, owner_id: UUID = Depends(get_current_owner_id)) -> list[dict]:
+def hybrid_search_endpoint(request: HybridSearchRequest, owner_id: UUID = Depends(rate_limiter("hybrid_search", 30, 60))) -> list[dict]:
     return hybrid_search(
         owner_id,
         request.query,
@@ -67,7 +68,7 @@ class ChatRequest(BaseModel):
 chat_client = GeminiChatClient(get_settings().gemini_api_key, get_settings().gemini_chat_model)
 reranker = CrossEncoderReranker(get_settings().reranker_model)
 @app.post("/chat")
-def chat(request: ChatRequest, owner_id: UUID = Depends(get_current_owner_id)) -> StreamingResponse:
+def chat(request: ChatRequest, owner_id: UUID = Depends(rate_limiter("chat", 10, 60))) -> StreamingResponse:
     def event_stream():
         for event in answer_query(
                 owner_id,
@@ -85,7 +86,7 @@ class AgentChatRequest(BaseModel):
     query: str
 
 @app.post("/agent-chat")
-def agent_chat(request: AgentChatRequest, owner_id: UUID = Depends(get_current_owner_id)) -> StreamingResponse:
+def agent_chat(request: AgentChatRequest, owner_id: UUID = Depends(rate_limiter("agent_chat", 10, 60))) -> StreamingResponse:
     def event_stream():
         for event in run_agent_turn(owner_id, request.query, embedding_client, cortex_api_client, chat_client):
             yield f"data: {json.dumps(event, default=str)}\n\n"
@@ -96,7 +97,7 @@ class AgentConfirmRequest(BaseModel):
     approve: bool
 
 @app.post("/agent-chat/confirm")
-def agent_chat_confirm(request: AgentConfirmRequest, owner_id: UUID = Depends(get_current_owner_id)) -> dict:
+def agent_chat_confirm(request: AgentConfirmRequest, owner_id: UUID = Depends(rate_limiter("confirm", 20, 60))) -> dict:
     res = confirm_pending_action(
         owner_id,
         request.confirmation_id,

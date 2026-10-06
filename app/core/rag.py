@@ -2,11 +2,13 @@ from typing import Iterator
 from uuid import UUID
 import logging
 
+from app.core.audit import log_llm_call
 from app.core.chunk_repository import get_chunk_text_for_note
 from app.core.cortex_api_client import CortexApiClient
 from app.core.embeddings import GeminiEmbeddingClient
 from app.core.generation import GeminiChatClient
 from app.core.hybrid_search import hybrid_search
+from app.core.pii import redact_pii
 from app.core.reranking import CrossEncoderReranker
 
 logger = logging.getLogger(__name__)
@@ -22,19 +24,20 @@ def hydrate_missing_context(owner_id: UUID, fused_results: list[dict]) -> list[d
         final_res.append(res)
     return final_res
 
-def build_user_content(query: str, context_items: list[dict]) -> str:
+def build_user_content(query: str, context_items: list[dict]) -> tuple[str, int]:
     content_parts = []
+    total_redactions = 0
     for i, item in enumerate(context_items, start=1):
         chunk_text = item.get("chunk_text")
         if chunk_text:
-            content_parts.append(f"[Source {i}]\n{chunk_text.strip()}")
+            redacted_text, count = redact_pii(chunk_text.strip())
+            total_redactions += count
+            content_parts.append(f"[Source {i}]\n{redacted_text}")
     context_string = "\n\n".join(content_parts)
     final_prompt = (
-        f"{context_string}\n\n"
-        f"====================\n"
-        f"Question: {query}"
+        f"{context_string}\n\n====================\nQuestion: {query}"
     )
-    return final_prompt
+    return final_prompt, total_redactions
 
 
 def answer_query(
@@ -74,7 +77,8 @@ def answer_query(
         context_items = hydrate_missing_context(owner_id, fused_results)
         context_items = reranker.rerank(query, context_items, top_k=top_k)
         yield {"type": "sources", "sources": context_items}
-        prompt = build_user_content(query, context_items)
+        prompt, redact_count = build_user_content(query, context_items)
+        log_llm_call(owner_id, "chat", chat_client.model, redact_count)
         for piece in chat_client.stream_answer(system_instruct=system_instruct, user_content=prompt):
             yield {"type": "token", "text": piece}
 

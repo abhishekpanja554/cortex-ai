@@ -6,10 +6,12 @@ from uuid import UUID
 from google.genai import types
 
 from app.core.agent_tools_schema import SEARCH_NOTES_DECLARATION, GET_NOTE_DECLARATION, DELETE_NOTE_DECLARATION
+from app.core.audit import log_llm_call
 from app.core.cortex_api_client import CortexApiClient
 from app.core.embeddings import GeminiEmbeddingClient
 from app.core.generation import GeminiChatClient
 from app.core.pending_actions import create_pending_action, resolve_pending_action
+from app.core.pii import redact_dict_vals
 from app.core.tools import search_notes_tool, get_note_tool, delete_note_tool
 
 logger = logging.getLogger(__name__)
@@ -64,7 +66,9 @@ def run_agent_turn(
             yield {"type": "tool_call", "tool": name, "args": args}
             res = safe_tools[name](**args)
             yield {"type": "tool_result", "tool": name, "result": res}
-            message = types.Part.from_function_response(name=name, response=res)
+            redacted_res, redact_count = redact_dict_vals(res)
+            log_llm_call(owner_id, f"agent_chat:{name}", chat_client.model, redact_count)
+            message = types.Part.from_function_response(name=name, response=redacted_res)
         else:
             yield {"type": "error", "message": "Agent exceeded max tool call steps."}
     except Exception as e:
