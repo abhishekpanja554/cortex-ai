@@ -41,19 +41,50 @@ def get_pending_action(confirmation_id: UUID) -> dict | None:
         row = session.execute(stmt).first()
         return dict(row._mapping) if row else None
 
-def resolve_pending_action(confirmation_id: UUID, owner_id: UUID, approved: bool) -> dict | None:
-    new_status = "EXECUTED" if approved else "REJECTED"
+RETRYABLE_STATUSES = ("PENDING", "FAILED")
+
+def claim_pending_action(confirmation_id: UUID, owner_id: UUID) -> dict | None:
     stmt = (
         update(pending_actions_table)
         .where(
             pending_actions_table.c.id == confirmation_id,
             pending_actions_table.c.owner_id == owner_id,
-            pending_actions_table.c.status == "PENDING",
+            pending_actions_table.c.status.in_(RETRYABLE_STATUSES),
         )
-        .values(status=new_status, resolved_at=sa.text("now()"))
+        .values(status="EXECUTING")
         .returning(pending_actions_table.c.tool_name, pending_actions_table.c.tool_args)
     )
     with get_session() as session:
         row = session.execute(stmt).first()
         session.commit()
         return dict(row._mapping) if row else None
+
+def finish_pending_action(confirmation_id: UUID, succeeded: bool) -> None:
+    values = {"status": "EXECUTED", "resolved_at": sa.text("now()")} if succeeded else {"status": "FAILED"}
+    stmt = (
+        update(pending_actions_table)
+        .where(
+            pending_actions_table.c.id == confirmation_id,
+            pending_actions_table.c.status == "EXECUTING",
+        )
+        .values(**values)
+    )
+    with get_session() as session:
+        session.execute(stmt)
+        session.commit()
+
+def reject_pending_action(confirmation_id: UUID, owner_id: UUID) -> bool:
+    stmt = (
+        update(pending_actions_table)
+        .where(
+            pending_actions_table.c.id == confirmation_id,
+            pending_actions_table.c.owner_id == owner_id,
+            pending_actions_table.c.status.in_(RETRYABLE_STATUSES),
+        )
+        .values(status="REJECTED", resolved_at=sa.text("now()"))
+        .returning(pending_actions_table.c.id)
+    )
+    with get_session() as session:
+        row = session.execute(stmt).first()
+        session.commit()
+        return row is not None

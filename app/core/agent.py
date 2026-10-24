@@ -5,17 +5,35 @@ from uuid import UUID
 
 from google.genai import types
 
-from app.core.agent_tools_schema import SEARCH_NOTES_DECLARATION, GET_NOTE_DECLARATION, DELETE_NOTE_DECLARATION, \
-    CREATE_NOTE_DECLARATION, UPDATE_NOTE_DECLARATION, BULK_DELETE_NOTES_DECLARATION
+from app.core.agent_tools_schema import (
+    BULK_DELETE_NOTES_DECLARATION,
+    CREATE_NOTE_DECLARATION,
+    DELETE_NOTE_DECLARATION,
+    GET_NOTE_DECLARATION,
+    SEARCH_NOTES_DECLARATION,
+    UPDATE_NOTE_DECLARATION,
+)
 from app.core.audit import log_llm_call
 from app.core.cortex_api_client import CortexApiClient
 from app.core.cost import record_llm_usage
 from app.core.embeddings import GeminiEmbeddingClient
 from app.core.generation import GeminiChatClient
-from app.core.pending_actions import create_pending_action, resolve_pending_action
+from app.core.pending_actions import (
+    claim_pending_action,
+    create_pending_action,
+    finish_pending_action,
+    get_pending_action,
+    reject_pending_action,
+)
 from app.core.pii import redact_dict_vals
-from app.core.tools import search_notes_tool, get_note_tool, delete_note_tool, create_note_tool, update_note_tool, \
-    bulk_delete_notes_tool
+from app.core.tools import (
+    bulk_delete_notes_tool,
+    create_note_tool,
+    delete_note_tool,
+    get_note_tool,
+    search_notes_tool,
+    update_note_tool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -125,28 +143,52 @@ def confirm_pending_action(
     approved: bool,
     cortex_api_client: CortexApiClient,
 ) -> dict:
-    resolved = resolve_pending_action(confirmation_id, owner_id, approved)
-    if resolved is None:
-        return {
-            "status": "not_found",
-            "message": "Pending action not found, already resolved, or not yours."
-        }
     if not approved:
-        return {
-            "status": "rejected",
-            "message": "Action discarded."
-        }
-    tool_name = resolved["tool_name"]
-    tool_args = resolved["tool_args"]
+        if reject_pending_action(confirmation_id, owner_id):
+            return {
+                "status": "rejected",
+                "message": "Action discarded."
+            }
+        return _unavailable_action_response(confirmation_id, owner_id)
+
+    claimed = claim_pending_action(confirmation_id, owner_id)
+    if claimed is None:
+        return _unavailable_action_response(confirmation_id, owner_id)
+    tool_name = claimed["tool_name"]
+    tool_args = claimed["tool_args"]
     try:
         res = EXECUTABLE_TOOLS[tool_name](owner_id, cortex_api_client, **tool_args)
-        return {
-            "status": "executed",
-            "result": res
-        }
     except Exception as e:
         logger.exception("Failed to execute confirmed action.")
+        finish_pending_action(confirmation_id, succeeded=False)
         return {
             "status": "error",
             "message": str(e)
         }
+    finish_pending_action(confirmation_id, succeeded=True)
+    return {
+        "status": "executed",
+        "result": res
+    }
+
+def _unavailable_action_response(confirmation_id: UUID, owner_id: UUID) -> dict:
+    action = get_pending_action(confirmation_id)
+    if action is None or action["owner_id"] != owner_id:
+        return {
+            "status": "not_found",
+            "message": "Pending action not found or not yours."
+        }
+    if action["status"] == "EXECUTED":
+        return {
+            "status": "already_executed",
+            "message": "This action was already carried out."
+        }
+    if action["status"] == "REJECTED":
+        return {
+            "status": "already_rejected",
+            "message": "This action was already discarded."
+        }
+    return {
+        "status": "in_progress",
+        "message": "This action is being carried out right now."
+    }

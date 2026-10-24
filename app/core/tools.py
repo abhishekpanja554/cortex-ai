@@ -63,8 +63,10 @@ def create_note_tool(
     try:
         note = cortex_api_client.create_note(owner_id, title, body)
         return {"success": True, "note_id": note["id"], "title": note["title"]}
-    except httpx.HTTPStatusError:
-        return {"success": False, "error": "Failed to create note"}
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code < 500:
+            return {"success": False, "error": "Failed to create note"}
+        raise
 
 def update_note_tool(
         owner_id: UUID,

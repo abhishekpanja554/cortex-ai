@@ -1,12 +1,12 @@
 import json
+import logging
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
-from app.core.agent import run_agent_turn, confirm_pending_action
-from app.core.auth import get_current_owner_id
+from app.core.agent import confirm_pending_action, run_agent_turn
 from app.core.chunk_repository import search_chunks
 from app.core.config import get_settings
 from app.core.cortex_api_client import CortexApiClient
@@ -14,8 +14,6 @@ from app.core.embeddings import GeminiEmbeddingClient
 from app.core.generation import GeminiChatClient
 from app.core.hybrid_search import hybrid_search
 from app.core.rag import answer_query
-import logging
-
 from app.core.rate_limit import rate_limiter
 from app.core.reranking import CrossEncoderReranker
 
@@ -111,6 +109,8 @@ def agent_chat_confirm(request: AgentConfirmRequest, owner_id: UUID = Depends(ra
     )
     if res["status"] == "not_found":
         raise HTTPException(status_code=404, detail=res["message"])
+    if res["status"] in ("already_executed", "already_rejected", "in_progress"):
+        raise HTTPException(status_code=409, detail={"status": res["status"], "message": res["message"]})
     if res["status"] == "error":
         raise HTTPException(status_code=500, detail=res["message"])
     return res
