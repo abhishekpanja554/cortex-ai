@@ -5,13 +5,12 @@ import logging
 from google.genai import types
 
 from app.core.audit import log_llm_call
-from app.core.chunk_repository import get_chunk_text_for_note
 from app.core.conversations import create_conversation, get_conversation, append_turn
 from app.core.cortex_api_client import CortexApiClient
 from app.core.cost import record_llm_usage
 from app.core.embeddings import GeminiEmbeddingClient
 from app.core.generation import GeminiChatClient
-from app.core.hybrid_search import hybrid_search
+from app.core.hybrid_search import hybrid_search, hydrate_missing_context
 from app.core.pii import redact_pii
 from app.core.query_cache import get_cached_answer, store_answer
 from app.core.reranking import CrossEncoderReranker
@@ -25,17 +24,6 @@ def pick_chat_client(
         complex_chat_client: GeminiChatClient
 ) -> GeminiChatClient:
     return complex_chat_client if len(context_items) >= COMPLEX_QUERY_SOURCE_THRESHOLD else simple_chat_client
-
-def hydrate_missing_context(owner_id: UUID, fused_results: list[dict]) -> list[dict]:
-    final_res = []
-    for res in fused_results:
-        if res.get('chunk_text') is None:
-            fetched_text = get_chunk_text_for_note(owner_id, res["note_id"])
-            if fetched_text is None:
-                continue
-            res["chunk_text"] = fetched_text
-        final_res.append(res)
-    return final_res
 
 def build_user_content(query: str, context_items: list[dict]) -> tuple[str, int]:
     content_parts = []

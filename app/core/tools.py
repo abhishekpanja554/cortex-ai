@@ -2,6 +2,7 @@ from uuid import UUID
 
 import httpx
 
+from app.core.chunk_repository import get_chunk_text_for_note
 from app.core.cortex_api_client import CortexApiClient
 from app.core.embeddings import GeminiEmbeddingClient
 from app.core.hybrid_search import hybrid_search
@@ -20,12 +21,16 @@ def search_notes_tool(
         top_k=top_k,
         embedding_client=embedding_client,
         cortex_api_client=cortex_api_client)
-    return {
-        "results": [
-            {"note_id": str(r["note_id"]), "snippet": r.get("chunk_text") or r.get("title")}
-            for r in res
-        ]
-    }
+    results = []
+    for r in res:
+        snippet = r.get("chunk_text")
+        if snippet is None:
+            # Keyword-only hit. Unlike /chat, don't drop it when there are no chunks yet:
+            # a just-created note (e.g. from create_note) isn't embedded for a few seconds,
+            # and the agent still needs to see it to act on it. Fall back to the title.
+            snippet = get_chunk_text_for_note(owner_id, r["note_id"]) or r.get("title")
+        results.append({"note_id": str(r["note_id"]), "title": r.get("title"), "snippet": snippet})
+    return {"results": results}
 
 def get_note_tool(
         owner_id: UUID,

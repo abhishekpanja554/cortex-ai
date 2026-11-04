@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from app.core.chunk_repository import search_chunks
+from app.core.chunk_repository import get_chunk_text_for_note, search_chunks
 from app.core.cortex_api_client import CortexApiClient
 from app.core.embeddings import GeminiEmbeddingClient
 
@@ -21,21 +21,33 @@ def hybrid_search(
     keyword_ranks = _rank_keyword_results(cortex_api_search_res)
     return _fuse_rankings(vector_ranks, keyword_ranks, top_k)
 
-def _rank_vector_results(chunk_results: list[dict]) -> dict[UUID, tuple[int, float, str]]:
+def hydrate_missing_context(owner_id: UUID, fused_results: list[dict]) -> list[dict]:
+    final_res = []
+    for res in fused_results:
+        if res.get('chunk_text') is None:
+            fetched_text = get_chunk_text_for_note(owner_id, res["note_id"])
+            if fetched_text is None:
+                continue
+            res["chunk_text"] = fetched_text
+        final_res.append(res)
+    return final_res
+
+def _rank_vector_results(chunk_results: list[dict]) -> dict[UUID, tuple[int, float, str, str | None]]:
     best_matches_by_note = {}
     for chunk in chunk_results:
         note_id = chunk["note_id"]
         distance = chunk["distance"]
         chunk_text = chunk["chunk_text"]
+        title = chunk.get("title")
 
         if note_id not in best_matches_by_note or distance < best_matches_by_note[note_id][0]:
-            best_matches_by_note[note_id] = (distance, chunk_text)
+            best_matches_by_note[note_id] = (distance, chunk_text, title)
 
     sorted_notes = sorted(best_matches_by_note.items(), key=lambda item: item[1][0])
 
     final_ranked_results = {}
-    for rank, (note_id, (distance, text)) in enumerate(sorted_notes, start=1):
-        final_ranked_results[note_id] = (rank, distance, text)
+    for rank, (note_id, (distance, text, title)) in enumerate(sorted_notes, start=1):
+        final_ranked_results[note_id] = (rank, distance, text, title)
 
     return final_ranked_results
 
@@ -48,7 +60,7 @@ def _rank_keyword_results(note_results: list[dict]) -> dict[UUID, tuple[int, str
     return final_ranked_results
 
 def _fuse_rankings(
-        vector_ranks: dict[UUID, tuple[int, float, str]],
+        vector_ranks: dict[UUID, tuple[int, float, str, str | None]],
         keyword_ranks: dict[UUID, tuple[int, str]],
         top_k: int,
 ) -> list[dict]:
@@ -58,24 +70,27 @@ def _fuse_rankings(
         score = 0.0
         distance = None
         chunk_text = None
-        title = None
+        vector_title = None
+        keyword_title = None
 
         v_data = vector_ranks.get(note_id)
         k_data = keyword_ranks.get(note_id)
 
         if v_data is not None:
-            v_rank, distance, chunk_text = v_data
+            v_rank, distance, chunk_text, vector_title = v_data
             score += 1.0 / (_RRF_K + v_rank)
 
         if k_data is not None:
-            k_rank, title = k_data
+            k_rank, keyword_title = k_data
             score += 1.0 / (_RRF_K + k_rank)
         fused_results.append({
             "note_id": note_id,
             "score": score,
             "distance": distance,
             "chunk_text": chunk_text,
-            "title": title
+            # cortex-api's title is the live source of truth; the chunk's copy is
+            # only as fresh as the last embedding job.
+            "title": keyword_title or vector_title
         })
     fused_results.sort(key=lambda x: x["score"], reverse=True)
 

@@ -16,11 +16,12 @@ note_chunks_table = sa.Table(
     sa.Column("owner_id", sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
     sa.Column("chunk_index", sa.Integer, nullable=False),
     sa.Column("chunk_text", sa.Text, nullable=False),
+    sa.Column("title", sa.Text, nullable=True),
     sa.Column("embedding", Vector(3072), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
 )
 
-def save_chunks(note_id: UUID, owner_id: UUID, chunks: list[str], embeddingd: list[list[float]]) -> None:
+def save_chunks(note_id: UUID, owner_id: UUID, title: str | None, chunks: list[str], embeddingd: list[list[float]]) -> None:
     if len(chunks) != len(embeddingd):
         raise ValueError(f"chunks and embeddings must have the same length ({len(chunks)} != {len(embeddingd)})")
 
@@ -33,6 +34,7 @@ def save_chunks(note_id: UUID, owner_id: UUID, chunks: list[str], embeddingd: li
             "owner_id": owner_id,
             "chunk_index": i,
             "chunk_text": chunk,
+            "title": title or None,
             "embedding": embedding,
         }
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddingd))
@@ -55,6 +57,7 @@ def search_chunks(owner_id: UUID, query_embedding: list[float], top_k: int) -> l
             note_chunks_table.c.note_id,
             note_chunks_table.c.chunk_index,
             note_chunks_table.c.chunk_text,
+            note_chunks_table.c.title,
             distance_expr.label("distance")
         ).where(note_chunks_table.c.owner_id == owner_id)
         .order_by(distance_expr)

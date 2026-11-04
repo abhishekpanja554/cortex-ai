@@ -33,6 +33,7 @@ class SearchResultItem(BaseModel):
     note_id: UUID
     chunk_index: int
     chunk_text: str
+    title: str | None = None
     distance: float
 
 class SearchResponse(BaseModel):

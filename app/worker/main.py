@@ -21,7 +21,7 @@ def _process(message: EmbeddingJobMessage, embedding_client: GeminiEmbeddingClie
     chunks = chunk_text(full_text, settings.chunk_size_tokens, settings.chunk_overlap_tokens)
     embeddings = embedding_client.embed(chunks)
     delete_chunks(message.note_id)
-    save_chunks(message.note_id, message.owner_id, chunks, embeddings)
+    save_chunks(message.note_id, message.owner_id, title=message.title, chunks=chunks, embeddingd=embeddings)
 
 
 def run() -> None:

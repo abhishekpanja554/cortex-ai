@@ -2,7 +2,7 @@ from google.genai import types
 
 SEARCH_NOTES_DECLARATION = types.FunctionDeclaration(
     name="search_notes",
-    description="Search the user's notes by keyword/semantic relevance. Returns matching notes with id and a text snippet.",
+    description="Search the user's notes by keyword/semantic relevance. Returns matching notes with id, title, and a text snippet.",
     parameters_json_schema={
         "type": "object",
         "properties": {
